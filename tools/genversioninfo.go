@@ -28,7 +28,7 @@ func atoi(s string) int {
 	return n
 }
 
-func Genverioninfo() {
+func Genversioninfo() {
 
 	ver := git("describe", "--tags", "--abbrev=0")
 	commit_id := git("rev-parse", "--short", "HEAD")
