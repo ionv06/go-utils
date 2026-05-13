@@ -1,4 +1,4 @@
-package path
+package utils
 
 import (
 	"path/filepath"
