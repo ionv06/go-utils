@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"os/exec"
 	"strconv"
@@ -27,6 +28,13 @@ func atoi(s string) int {
 }
 
 func main() {
+
+	companyName := flag.String("CompanyName", "Cometa SRL", "company name for versioninfo.json")
+	fileDescription := flag.String("FileDescription", "ContabSQL Tools", "file description for versioninfo.json")
+	internalName := flag.String("InternalName", "contab_tools", "internal name for versioninfo.json")
+	originalFilename := flag.String("OriginalFilename", "saft-xml2xlsx.exe", "original filename for versioninfo.json")
+	productName := flag.String("ProductName", "ERP Tools", "product name for versioninfo.json")
+	flag.Parse()
 
 	ver := git("describe", "--tags", "--abbrev=0")
 	commit_id := git("rev-parse", "--short", "HEAD")
@@ -74,12 +82,12 @@ func main() {
 		},
 		"StringFileInfo": map[string]interface{}{
 			"Comments":         commit_id,
-			"CompanyName":      "Cometa SRL",
-			"FileDescription":  "ContabSQL Tools",
+			"CompanyName":      *companyName,
+			"FileDescription":  *fileDescription,
 			"FileVersion":      ver,
-			"InternalName":     "contab_tools",
-			"OriginalFilename": "saft-xml2xlsx.exe",
-			"ProductName":      "ERP Tools",
+			"InternalName":     *internalName,
+			"OriginalFilename": *originalFilename,
+			"ProductName":      *productName,
 			"ProductVersion":   ver,
 		},
 	}
