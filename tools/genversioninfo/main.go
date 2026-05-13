@@ -42,6 +42,7 @@ func main() {
 	if ver == "" {
 		ver = "v0.0.0"
 	}
+
 	if commit_id == "" {
 		commit_id = "abcd"
 	}
