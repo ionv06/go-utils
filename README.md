@@ -27,6 +27,16 @@ go get github.com/ionv06/go-utils
 See also [Types and sentinel errors](#types-and-sentinel-errors) for `Company`,
 `UserError` and the `Err*` values.
 
+**[Package `winsvc`](#package-winsvc)**
+
+| Function | What it does |
+|---|---|
+| [`ConfigFromEnv(run, shutdown) Config`](#configfromenvrun-shutdown-config) | Builds a `Config` from the service `.env` variables plus the lifecycle hooks |
+| [`(Config) Validate() error`](#config-validate-error) | Errors when any service identity field is unset, naming the missing env vars |
+| [`Run(cfg Config) error`](#runcfg-config-error) | Runs the app under the Windows SCM when started as a service, else as a console app |
+| [`Install(cfg Config) error`](#installcfg-config-error) | Registers the executable as an auto-start Windows service with restart-on-failure recovery |
+| [`Remove(cfg Config) error`](#removecfg-config-error) | Stops (if running) and deletes the Windows service |
+
 **[Tool `genversioninfo`](#tool-genversioninfo)** — generates `versioninfo.json`
 from git metadata.
 
@@ -148,6 +158,92 @@ sentinel values:
 
 Validation requires 2–10 digits with a correct control digit (the official CUI
 checksum).
+
+## Package `winsvc`
+
+Installs, removes, and runs a Go program as a Windows service. The Windows
+implementation is behind the `windows` build tag; on other platforms `Run` just
+runs the app and `Install`/`Remove` return `ErrUnsupported`.
+
+```go
+import "github.com/ionv06/go-utils/winsvc"
+```
+
+All three functions take a `Config` that supplies both the service identity and
+the lifecycle hooks:
+
+```go
+type Config struct {
+    ServiceName string // key used by the SCM and by sc / services.msc
+    DisplayName string // shown in services.msc
+    Description string // shown in services.msc
+
+    Run      func() error              // starts the app, blocks until it stops
+    Shutdown func(ctx context.Context) // graceful stop on SCM stop/shutdown; may be nil
+}
+```
+
+`Run` supplies the two app-specific hooks; the identity fields are read from a
+`.env` file by `ConfigFromEnv`, so a program only writes the hooks:
+
+```go
+func serviceConfig() winsvc.Config {
+    return winsvc.ConfigFromEnv(runApp, func(ctx context.Context) {
+        if httpSrv != nil {
+            _ = httpSrv.Shutdown(ctx)
+        }
+    })
+}
+
+func installService() error { return winsvc.Install(serviceConfig()) }
+func removeService() error  { return winsvc.Remove(serviceConfig()) }
+func runService() error     { return winsvc.Run(serviceConfig()) }
+```
+
+### `ConfigFromEnv(run, shutdown) Config`
+
+Loads a `.env` file via [`utils.LoadEnv`](#loadenv-error) and reads the service
+identity from these variables:
+
+| Variable | Field |
+|---|---|
+| `SERVICE_NAME` | `ServiceName` |
+| `SERVICE_DISPLAY_NAME` | `DisplayName` |
+| `SERVICE_DESCRIPTION` | `Description` |
+
+`run` and `shutdown` are wired straight into the returned `Config`. A missing
+`.env` is **not** an error here — `Install` and `Remove` call `Validate` to
+enforce that the identity is present.
+
+### `(Config) Validate() error`
+
+Returns an error naming every missing identity variable, e.g.
+`configurare serviciu incompletă în .env: lipsă SERVICE_NAME, SERVICE_DESCRIPTION`.
+`Install` and `Remove` call it first, so they refuse to run against an
+incomplete `.env`.
+
+### `Run(cfg Config) error`
+
+Runs `cfg.Run`. On Windows, if the process was started by the Service Control
+Manager it runs under the SCM (chdir to the executable's directory first, so a
+`.env` next to the binary resolves) and dispatches stop/shutdown to
+`cfg.Shutdown` with a 10s deadline; otherwise it runs `cfg.Run` directly. An app
+that exits on its own with an error reports a non-zero code so the SCM's recovery
+actions restart it.
+
+### `Install(cfg Config) error`
+
+Registers the current executable as an auto-start service with recovery actions
+(restart after 5s / 10s / 30s, failure counter reset daily). Calls
+`cfg.Validate` first, so an incomplete `.env` is rejected before any change.
+Fails if the service already exists. Must be run from an elevated prompt.
+Returns `ErrUnsupported` off Windows.
+
+### `Remove(cfg Config) error`
+
+Stops the service (best effort) and deletes it by `cfg.ServiceName`. Calls
+`cfg.Validate` first. Fails if the service is not installed. Must be run from an
+elevated prompt. Returns `ErrUnsupported` off Windows.
 
 ## Tool `genversioninfo`
 
